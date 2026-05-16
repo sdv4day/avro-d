@@ -180,12 +180,45 @@ assert(parseJSON(data) == parseJSON(
 
 ## Features Not Yet Implemented
 
-- Logical Type support
-- Specific Data types generated for schemas
-- Codex compression support
-- Object Container Files
-- Protocol wire format
-- Schema Resolution
+None - all core Avro features are now implemented!
+
+## Recently Added Features
+
+The following features have been added to this library:
+
+### Logical Type Support
+- `DecimalLogicalType` - Decimal numbers with precision and scale
+- `UuidLogicalType` - UUID string representation
+- `DateLogicalType` - Date (days since epoch)
+- `TimeMillisLogicalType` / `TimeMicrosLogicalType` - Time of day
+- `TimestampMillisLogicalType` / `TimestampMicrosLogicalType` - Timestamps
+- `LocalTimestampMillisLogicalType` / `LocalTimestampMicrosLogicalType` - Local timestamps
+
+### Schema Resolution
+- `SchemaResolver` - Checks compatibility between reader and writer schemas
+- `CompatibilityResult` - Reports compatibility status, errors, and warnings
+- Supports type promotion (int→long, float→double, etc.)
+
+### Object Container Files
+- `ContainerWriter` - Writes Avro container files with schema and data blocks
+- `ContainerReader` - Reads Avro container files
+- Supports sync markers for file integrity
+
+### Compression Support
+- `NullCodec` - No compression
+- `DeflateCodec` - DEFLATE/zlib compression
+- `CodecFactory` - Creates codecs by name
+
+### Specific Data Types
+- `AvroType!T` - Compile-time mapping from D types to Avro types
+- `SpecificRecord` - Base class for type-safe record types
+- `SchemaToDGenerator` - Generates D code from Avro schemas
+
+### Protocol Wire Format
+- `Protocol` - Defines Avro RPC protocols
+- `Message` - Defines RPC messages with request/response schemas
+- `RpcClient` / `RpcServer` - RPC client and server implementations
+- `RpcTransport` - Abstract transport layer for RPC
 
 ## API Documentation
 

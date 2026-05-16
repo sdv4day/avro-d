@@ -27,7 +27,7 @@ version (unittest) {
    See_Also: [Encoder]
 */
 class BinaryDecoder(IRangeT) : Decoder
-if (isInputRange!IRangeT && is(ElementType!(IRangeT) : ubyte))
+if (isInputRange!IRangeT && is(ElementType!IRangeT == ubyte))
 {
   private IRangeT iRange;
 
@@ -421,12 +421,61 @@ if (isInputRange!IRangeT && is(ElementType!(IRangeT) : ubyte))
 }
 
 /// Convenience function to create a [BinaryDecoder] and infer the range type.
-auto binaryDecoder(IRangeT)(IRangeT iRange) {
+auto binaryDecoder(IRangeT)(IRangeT iRange)
+if (isInputRange!IRangeT && is(ElementType!IRangeT == ubyte))
+{
   return new BinaryDecoder!IRangeT(iRange);
+}
+
+/// Overload for const(ubyte)[] - creates a mutable copy for decoding.
+BinaryDecoder!(ubyte[]) binaryDecoder(const(ubyte)[] data) @trusted {
+  return new BinaryDecoder!(ubyte[])(data.dup);
+}
+
+/// Overload for void[] - copies data to ubyte[] for decoding.
+BinaryDecoder!(ubyte[]) binaryDecoder(void[] data) @trusted {
+  auto result = new ubyte[](data.length);
+  () @trusted {
+    import core.stdc.string : memcpy;
+    if (data.length > 0) {
+      memcpy(result.ptr, data.ptr, data.length);
+    }
+  }();
+  return new BinaryDecoder!(ubyte[])(result);
+}
+
+/// Overload for const(void)[] - copies data to ubyte[] for decoding.
+BinaryDecoder!(ubyte[]) binaryDecoder(const(void)[] data) @trusted {
+  auto result = new ubyte[](data.length);
+  () @trusted {
+    import core.stdc.string : memcpy;
+    if (data.length > 0) {
+      memcpy(result.ptr, data.ptr, data.length);
+    }
+  }();
+  return new BinaryDecoder!(ubyte[])(result);
 }
 
 unittest {
   ubyte[] data = [0x01, 0x00];
+  auto decoder = binaryDecoder(data);
+  with (decoder) {
+    assert(readBoolean() == true);
+  }
+}
+
+///
+unittest {
+  const(ubyte)[] data = [0x01, 0x00];
+  auto decoder = binaryDecoder(data);
+  with (decoder) {
+    assert(readBoolean() == true);
+  }
+}
+
+///
+unittest {
+  void[] data = [cast(ubyte)0x01, cast(ubyte)0x00];
   auto decoder = binaryDecoder(data);
   with (decoder) {
     assert(readBoolean() == true);

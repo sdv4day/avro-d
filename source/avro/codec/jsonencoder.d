@@ -4,6 +4,7 @@ module avro.codec.jsonencoder;
 import std.algorithm : map;
 import std.range : put, isOutputRange;
 import std.conv : to;
+import std.container.dlist;
 
 import avro.codec.encoder : Encoder;
 import avro.codec.jsonutil : encodeJsonString;
@@ -15,6 +16,7 @@ class JsonEncoder(ORangeT) : Encoder
 if (isOutputRange!(ORangeT, char))
 {
   private ORangeT oRange;
+  private DList!bool firstItemStack;
   private bool firstItem = true;
 
   this (ORangeT oRange) {
@@ -111,10 +113,24 @@ if (isOutputRange!(ORangeT, char))
     writeString(sym);
   }
 
+  private void pushFirstItem() {
+    firstItemStack.insertFront(firstItem);
+    firstItem = true;
+  }
+
+  private void popFirstItem() {
+    if (!firstItemStack.empty) {
+      firstItem = firstItemStack.front;
+      firstItemStack.removeFront();
+    } else {
+      firstItem = false;
+    }
+  }
+
   override
   void writeArrayStart() {
     put(oRange, "[");
-    firstItem = true;
+    pushFirstItem();
   }
 
   override
@@ -130,17 +146,19 @@ if (isOutputRange!(ORangeT, char))
 
   override
   void writeArrayEnd() {
+    popFirstItem();
     put(oRange, "]");
   }
 
   override
   void writeMapStart() {
     put(oRange, "{");
-    firstItem = true;
+    pushFirstItem();
   }
 
   override
   void writeMapEnd() {
+    popFirstItem();
     put(oRange, "}");
   }
 
@@ -157,16 +175,19 @@ if (isOutputRange!(ORangeT, char))
   override
   void writeUnionStart() {
     put(oRange, "{");
+    pushFirstItem();
   }
 
   override
   void writeUnionType(size_t unionTypeIndex, string unionTypeName) {
+    startItem();
     writeMapKey(unionTypeName);
   }
 
   override
   void writeUnionEnd() {
-    writeMapEnd();
+    popFirstItem();
+    put(oRange, "}");
   }
 
   override
@@ -248,6 +269,17 @@ auto jsonEncoder(ORangeT)(ORangeT oRange) {
             e.writeInt(3);
             e.writeUnionEnd();
           }, `{"CAT": 3}`),
+      Test((e) {
+            e.writeRecordStart();
+            e.startItem();
+            e.writeRecordKey("arr");
+            e.writeArrayStart();
+            e.writeArrayEnd();
+            e.startItem();
+            e.writeRecordKey("num");
+            e.writeInt(1);
+            e.writeRecordEnd();
+          }, `{"arr": [], "num": 1}`),
   ];
 
   foreach (test; tests) {

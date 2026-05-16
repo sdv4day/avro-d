@@ -10,6 +10,7 @@
 # Compiled Static libraries
 *.a
 *.lib
+*.pdb
 
 # Executables
 *.exe
@@ -42,3 +43,5 @@ auto/
 GTAGS
 GRTAGS
 GPATH
+
+*.bin

@@ -72,6 +72,7 @@ if (isInputRange!(IRangeT) && isSomeChar!(ElementType!IRangeT))
               : sv == "-Infinity" ? -double.infinity : double.nan;
           return;
         } else if (cur() == Token.LONG) {
+          curToken = Token.DOUBLE;
           dv = lv.to!double;
           return;
         }
@@ -135,14 +136,17 @@ if (isInputRange!(IRangeT) && isSomeChar!(ElementType!IRangeT))
   /// Reads the input range for the next character (skipping whitespace).
   dchar next() {
     dchar ch = hasNext ? nextChar : ' ';
+    hasNext = false;
     while (isWhite(ch)) {
       if (ch == '\n') {
         lineNo++;
       }
+      if (iRange.empty()) {
+        throw new JsonLexException("Unexpected EOF while skipping whitespace");
+      }
       ch = iRange.front();
       iRange.popFront();
     }
-    hasNext = false;
     return ch;
   }
 

@@ -74,33 +74,31 @@ class GenericReader {
         break;
       case Type.ARRAY:
         auto v = datum.getValue!GenericArray();
-        GenericDatum[] arr = v.getValue();
         auto elemSchema = v.getSchema().getElementSchema();
-        arr.length = 0;
+        v.getValue().length = 0;
         size_t start = 0;
         for (size_t m = d.readArrayStart(); m != 0; m = d.readArrayNext()) {
-          arr.length += m;
-          for (; start < arr.length; ++start) {
-            arr[start] = new GenericDatum(elemSchema);
-            read(d, isResolving, arr[start]);
+          v.getValue().length += m;
+          for (; start < v.getValue().length; ++start) {
+            v.getValue()[start] = new GenericDatum(elemSchema);
+            read(d, isResolving, v.getValue()[start]);
           }
         }
         break;
       case Type.MAP:
         auto v = datum.getValue!GenericMap();
-        GenericDatum[string] r = v.getValue();
         const(Schema) valueSchema = v.getSchema().getValueSchema();
-        r.clear();
-        size_t start = 0;
+        v.getValue().clear();
+        size_t mapStart = 0;
         for (size_t m = d.readMapStart(); m != 0; m = d.readMapNext()) {
           for (size_t j = 0; j < m; j++) {
             string key = d.readString();
             GenericDatum value = new GenericDatum(valueSchema);
             read(d, isResolving, value);
-            r[key] = value;
+            v.getValue()[key] = value;
           }
         }
-        r.rehash();
+        v.getValue().rehash();
         break;
       default:
         throw new AvroRuntimeException("Unknown schema type: " ~ datum.getType().to!string);

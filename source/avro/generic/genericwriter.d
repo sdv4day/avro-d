@@ -72,25 +72,21 @@ class GenericWriter {
       case Type.ARRAY:
         const(GenericDatum[]) items = datum.getValue!GenericArray().getValue();
         e.writeArrayStart();
-        if (items.length > 0) {
-          e.setItemCount(items.length);
-          foreach (item; items) {
-            e.startItem();
-            write(item, e);
-          }
+        e.setItemCount(items.length);
+        foreach (item; items) {
+          e.startItem();
+          write(item, e);
         }
         e.writeArrayEnd();
         break;
       case Type.MAP:
         const(GenericDatum[string]) items = datum.getValue!GenericMap().getValue();
         e.writeMapStart();
-        if (items.length > 0) {
-          e.setItemCount(items.length);
-          foreach (key, item; items) {
-            e.startItem();
-            e.writeMapKey(key);
-            write(item, e);
-          }
+        e.setItemCount(items.length);
+        foreach (key, item; items) {
+          e.startItem();
+          e.writeMapKey(key);
+          write(item, e);
         }
         e.writeMapEnd();
         break;

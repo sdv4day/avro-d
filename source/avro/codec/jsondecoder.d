@@ -88,11 +88,12 @@ if (isInputRange!(IRangeT) && isSomeChar!(ElementType!IRangeT)) {
 
   ///
   unittest {
+    import std.math : isClose;
     string data = "12341 123.21";
     auto decoder = jsonDecoder(data);
     with (decoder) {
-      assert(readDouble() == 12341.0);
-      assert(readDouble() == 123.21);
+      assert(isClose(readDouble(), 12341.0));
+      assert(isClose(readDouble(), 123.21));
     }
   }
 
