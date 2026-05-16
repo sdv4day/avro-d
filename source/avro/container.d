@@ -3,8 +3,8 @@
 
    An Avro Object Container File consists of:
    - A magic number "Obj\x01"
-   - The file's schema (as JSON)
-   - Optional sync marker
+   - Metadata map (containing schema and codec)
+   - Sync marker (16 bytes)
    - One or more data blocks
 
    See_Also: https://avro.apache.org/docs/current/spec.html#Object+Container+Files
@@ -14,6 +14,7 @@ module avro.container;
 import std.conv : to;
 import std.array : appender;
 import std.zlib;
+import std.random : uniform;
 
 import avro.schema : Schema;
 import avro.type : Type;
@@ -83,19 +84,15 @@ public struct DataBlock {
    import avro.schema;
 
    auto schema = parser.parseText(`{"type": "record", "name": "Test", "fields": [{"name": "id", "type": "int"}]}`);
-   ubyte[] fileData;
-   auto writer = containerWriter(schema, appender(&fileData));
-   writer.writeHeader();
-   writer.startBlock();
-   // Write objects...
-   writer.endBlock();
+   auto writer = containerWriter(schema);
+   auto header = writer.writeHeader();
+   // Write data blocks...
    ---
 */
 public class ContainerWriter {
   private Schema schema;
   private Codec codec;
   private ubyte[SYNC_SIZE] syncMarker;
-  private ubyte[] buffer;
 
   /// Creates a new container writer.
   this(Schema schema, Codec codec = Codec.NULL) {
@@ -106,7 +103,6 @@ public class ContainerWriter {
 
   /// Generates a random sync marker.
   private void generateSyncMarker() @trusted {
-    import std.random : uniform;
     foreach (size_t i; 0 .. SYNC_SIZE) {
       syncMarker[i] = cast(ubyte)uniform(0, 256);
     }
@@ -119,12 +115,21 @@ public class ContainerWriter {
     output.put(MAGIC[]);
 
     auto encoder = binaryEncoder(output);
+
+    encoder.writeMapStart();
+    encoder.setItemCount(2);
+
+    encoder.startItem();
+    encoder.writeMapKey("avro.schema");
     encoder.writeString(schema.toString());
 
-    string codecName = codecToString(codec);
-    encoder.writeString(codecName);
+    encoder.startItem();
+    encoder.writeMapKey("avro.codec");
+    encoder.writeString(codecToString(codec));
 
-    encoder.writeBytes(syncMarker[]);
+    encoder.writeMapEnd();
+
+    encoder.writeFixed(syncMarker[]);
     encoder.flush();
 
     return output[];
@@ -138,6 +143,8 @@ public class ContainerWriter {
     encoder.writeLong(block.objectCount);
     encoder.writeLong(block.blockSize);
 
+    encoder.flush();
+
     ubyte[] dataToWrite;
     if (codec == Codec.DEFLATE) {
       dataToWrite = compressBlock(block.data);
@@ -145,8 +152,10 @@ public class ContainerWriter {
       dataToWrite = block.data;
     }
 
-    encoder.writeBytes(dataToWrite);
-    encoder.writeBytes(syncMarker[]);
+    output.put(dataToWrite);
+
+    encoder = binaryEncoder(output);
+    encoder.writeFixed(syncMarker[]);
     encoder.flush();
 
     return output[];
@@ -173,11 +182,16 @@ public class ContainerWriter {
         return "zstd";
     }
   }
+
+  /// Returns the sync marker.
+  public ubyte[SYNC_SIZE] getSyncMarker() const {
+    return syncMarker;
+  }
 }
 
 ///
 unittest {
-  import avro.schema : Schema, IntSchema;
+  import avro.schema : Schema;
 
   auto schema = Schema.createPrimitive(Type.INT);
   auto writer = new ContainerWriter(schema);
@@ -188,7 +202,7 @@ unittest {
 }
 
 /**
-   Reader for Avro Object Container Files.
+   Reader for Avro Container Files.
 
    Example:
    ---
@@ -203,27 +217,65 @@ unittest {
    ---
 */
 public class ContainerReader {
-  private BinaryDecoder!(ubyte[]) decoder;
+  private ubyte[] fileData;
+  private size_t position;
   private ContainerHeader header;
   private bool headerRead = false;
-  private long remainingInBlock = 0;
 
   /// Creates a container reader from the given data.
   this(ubyte[] data) {
-    this.decoder = binaryDecoder(data);
+    this.fileData = data;
+    this.position = 0;
   }
 
   /// Reads and validates the file header.
-  public ContainerHeader readHeader() {
+  public ContainerHeader readHeader() @trusted {
     if (headerRead) {
       return header;
     }
 
-    header.magic = decoder.readFixed(4);
+    if (fileData.length < 4) {
+      throw new AvroRuntimeException("File too small to be an Avro container file");
+    }
+
+    header.magic[] = fileData[position .. position + 4];
+    position += 4;
 
     if (!header.validateMagic()) {
       throw new AvroRuntimeException("Invalid Avro container file: bad magic bytes");
     }
+
+    auto decoder = binaryDecoder(fileData[position .. $]);
+
+    long mapCount = decoder.readLong();
+    string schemaJson;
+    string codecName = "null";
+
+    for (long i = 0; i < mapCount; i++) {
+      string key = decoder.readString();
+      auto valueBytes = decoder.readBytes();
+
+      if (key == "avro.schema") {
+        schemaJson = cast(string)valueBytes;
+      } else if (key == "avro.codec") {
+        codecName = cast(string)valueBytes;
+      }
+    }
+
+    decoder.readLong();
+
+    position += cast(size_t)(fileData.length - decoder.remainingData().length);
+
+    header.codec = codecFromString(codecName);
+
+    if (schemaJson !is null) {
+      import avro.parser : Parser;
+      auto parser = new Parser();
+      header.schema = parser.parseText(schemaJson);
+    }
+
+    header.syncMarker[] = decoder.readFixed(SYNC_SIZE);
+    position += SYNC_SIZE;
 
     headerRead = true;
     return header;
@@ -231,18 +283,26 @@ public class ContainerReader {
 
   /// Checks if there are more blocks to read.
   public bool hasNext() {
-    return true;
+    return position < fileData.length;
   }
 
   /// Reads the next data block.
   public DataBlock readBlock() {
     DataBlock block;
 
+    auto decoder = binaryDecoder(fileData[position .. $]);
+
     block.objectCount = decoder.readLong();
     block.blockSize = decoder.readLong();
 
-    block.data = decoder.readBytes();
-    block.syncMarker = decoder.readFixed(SYNC_SIZE);
+    position += cast(size_t)(fileData.length - position - decoder.remainingData().length);
+
+    block.data = fileData[position .. position + cast(size_t)block.blockSize];
+    position += cast(size_t)block.blockSize;
+
+    decoder = binaryDecoder(fileData[position .. $]);
+    block.syncMarker[] = decoder.readFixed(SYNC_SIZE);
+    position += SYNC_SIZE;
 
     return block;
   }
@@ -254,6 +314,39 @@ public class ContainerReader {
     }
     return header.schema;
   }
+
+  /// Returns the codec from the header.
+  public Codec getCodec() {
+    return header.codec;
+  }
+
+  /// Returns the current position in the file.
+  public size_t getPosition() const {
+    return position;
+  }
+
+  /// Converts a codec string to enum.
+  private static Codec codecFromString(string name) {
+    switch (name) {
+      case "null":
+        return Codec.NULL;
+      case "deflate":
+        return Codec.DEFLATE;
+      case "snappy":
+        return Codec.SNAPPY;
+      case "zstd":
+        return Codec.ZSTD;
+      default:
+        return Codec.NULL;
+    }
+  }
+}
+
+///
+unittest {
+  ubyte[] data = [cast(ubyte)'O', 'b', 'j', 0x01];
+  auto reader = new ContainerReader(data);
+  assert(reader.hasNext());
 }
 
 /**

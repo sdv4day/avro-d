@@ -35,6 +35,11 @@ if (isInputRange!IRangeT && is(ElementType!IRangeT == ubyte))
     this.iRange = iRange;
   }
 
+  /// Returns the remaining unread data.
+  public IRangeT remainingData() {
+    return iRange;
+  }
+
   override
   void readNull() {
   }

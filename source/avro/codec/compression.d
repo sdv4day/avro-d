@@ -97,7 +97,7 @@ public class DeflateCodec : Codec {
     if (data.length == 0) {
       return [];
     }
-    auto result = std.zlib.compress(cast(ubyte[])data);
+    auto result = std.zlib.compress(cast(ubyte[])data, level);
     return cast(ubyte[])result;
   }
 
