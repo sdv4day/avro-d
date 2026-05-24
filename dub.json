@@ -1,0 +1,13 @@
+{
+	"authors": [
+		"sdv"
+	],
+	"license": "Apache-2.0",
+	"targetPath": "target",
+	"copyright": "Copyright © 2022, sdv",
+	"name": "avro-d",
+	"description": "Library and code generators to use Apache Avro in D.",
+	"dependencies": {
+		"silly": "~>1.1.1"
+	}
+}
