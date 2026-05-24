@@ -19,7 +19,7 @@
 .dub
 docs.json
 __dummy.html
-docs/
+
 target/
 
 # From dub run adrdox -- .
