@@ -89,7 +89,6 @@ class GenericReader {
         auto v = datum.getValue!GenericMap();
         const(Schema) valueSchema = v.getSchema().getValueSchema();
         v.getValue().clear();
-        size_t mapStart = 0;
         for (size_t m = d.readMapStart(); m != 0; m = d.readMapNext()) {
           for (size_t j = 0; j < m; j++) {
             string key = d.readString();
